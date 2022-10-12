@@ -1,5 +1,5 @@
 # MQNet
 
-Complete code will be available soon.
+The complete code will be available soon.
 
 Please stay tuned!
