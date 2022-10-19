@@ -131,7 +131,7 @@ def eval_unlabeled_detection(P, models,unlabeled_loader, train_loader,label_i_lo
                 query_index += [query_index_i[j]]
                 subset_index += [subset_index_i[j]]
                 cnt+=1
-            if cnt >= int(P.n_query)/P.target_number or len(subset_index) >= P.n_query:
+            if cnt >= int(P.n_query)/P.num_IN_class or len(subset_index) >= P.n_query:
                 break
 
     end = datetime.datetime.now()

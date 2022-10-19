@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser(description='Parameter Processing')
 parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset') #CIFAR10, CIFAR100, ImageNet50
 parser.add_argument('--data_path', type=str, default='../data', help='dataset path')
 parser.add_argument('--gpu', default=None, nargs="+", type=int, help='GPU id to use')
+parser.add_argument("--data-parallel", default=False, type=str_to_bool, help="whether parallel or not")
 parser.add_argument('--ood-rate', type=float, default=0.6, metavar='N', help='rate of OOD over in')
 parser.add_argument('--n-class', type=str, default=10, help='# of classes')
 parser.add_argument('--trial', type=int, default=5, help='Random Seeds')
@@ -20,11 +21,12 @@ parser.add_argument('--model', type=str, default='ResNet18', help='model')
 parser.add_argument('--print_freq', '-p', default=300, type=int, help='print frequency (default: 20)')
 parser.add_argument('--seed', default=0, type=int, help="random seed")
 parser.add_argument('-j', '--workers', default=10, type=int, help='number of data loading workers (default: 4)')
+parser.add_argument("--ssl-save", default=True, type=str_to_bool, help="whether save ssl model or not")
 
 # Optimizer and scheduler
 parser.add_argument('--optimizer', default="SGD", help='optimizer to use, e.g. SGD, Adam')
 parser.add_argument('--lr', type=float, default=0.1, help='learning rate for updating network parameters')
-parser.add_argument('--lr-mqnet', type=float, default=0.01, help='learning rate for updating mqnet')
+parser.add_argument('--lr-mqnet', type=float, default=0.001, help='learning rate for updating mqnet')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum (default: 0.9)')
 parser.add_argument('-wd', '--weight_decay', default=5e-4, type=float,
@@ -71,7 +73,7 @@ parser.add_argument('--k', help='Initial learning rate', default=100.0, type=flo
 parser.add_argument('--t', help='Initial learning rate', default=0.9, type=float)
 # for MQNet
 parser.add_argument('--mqnet-mode', default="CONF", help="specifiy the mode of MQNet to use") #CONF, LL
-
+parser.add_argument('--mqnet-relu', default=True, type=str_to_bool, help="whether save ssl model or not")
 
 # Checkpoint and resumption
 parser.add_argument('--save_path', "-sp", type=str, default='', help='path to save results (default: do not save)')

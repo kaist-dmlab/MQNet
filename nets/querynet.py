@@ -12,5 +12,6 @@ class QueryNet(nn.Module):
 
     def forward(self, X):
         out = self.linear_1(X)
+        out = F.sigmoid(out)
         out = self.linear_2(out)
         return out

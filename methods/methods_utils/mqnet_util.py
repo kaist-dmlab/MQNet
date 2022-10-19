@@ -19,6 +19,38 @@ def get_labeled_features(args, models, labeled_in_loader):
         features_in = torch.cat((features_in, couts['simclr'].detach()), 0)
     return features_in
 
+def get_unlabeled_features_LL(args, models, unlabeled_loader):
+    models['csi'].eval()
+    layers = ('simclr', 'shift')
+    if not isinstance(layers, (list, tuple)):
+        layers = [layers]
+    kwargs = {layer: True for layer in layers}
+
+    # generate entire unlabeled features set
+    features_unlabeled = torch.tensor([]).to(args.device)
+    pred_loss = torch.tensor([]).to(args.device)
+    in_ood_masks = torch.tensor([]).type(torch.LongTensor).to(args.device)
+    indices = torch.tensor([]).type(torch.LongTensor).to(args.device)
+
+    for data in unlabeled_loader:
+        inputs = data[0].to(args.device)
+        labels = data[1].to(args.device)
+        index = data[2].to(args.device)
+
+        in_ood_mask = labels.le(args.num_IN_class - 1).type(torch.LongTensor).to(args.device)
+        in_ood_masks = torch.cat((in_ood_masks, in_ood_mask.detach()), 0)
+
+        out, couts = models['csi'](inputs, **kwargs)
+        features_unlabeled = torch.cat((features_unlabeled, couts['simclr'].detach()), 0)
+
+        out, features = models['backbone'](inputs)
+        pred_l = models['module'](features)  # pred_loss = criterion(scores, labels) # ground truth loss
+        pred_l = pred_l.view(pred_l.size(0))
+        pred_loss = torch.cat((pred_loss, pred_l.detach()), 0)
+
+        indices = torch.cat((indices, index), 0)
+
+    return pred_loss.reshape((-1, 1)), features_unlabeled, in_ood_masks.reshape((-1, 1)), indices
 
 def get_unlabeled_features(args, models, unlabeled_loader):
     models['csi'].eval()
@@ -29,7 +61,7 @@ def get_unlabeled_features(args, models, unlabeled_loader):
 
     # generate entire unlabeled features set
     features_unlabeled = torch.tensor([]).to(args.device)
-    uncertainty = torch.tensor([]).to(args.device)
+    conf = torch.tensor([]).to(args.device)
     in_ood_masks = torch.tensor([]).type(torch.LongTensor).to(args.device)
     indices = torch.tensor([]).type(torch.LongTensor).to(args.device)
 
@@ -47,10 +79,10 @@ def get_unlabeled_features(args, models, unlabeled_loader):
 
         out, features = models['backbone'](inputs)
         u, _ = torch.max(f(out.data), 1)
-        uncertainty = torch.cat((uncertainty, u), 0)
+        conf = torch.cat((conf, u), 0)
 
         indices = torch.cat((indices, index), 0)
-    uncertainty = 1 - uncertainty
+    uncertainty = 1-conf
 
     return uncertainty.reshape((-1, 1)), features_unlabeled, in_ood_masks.reshape((-1, 1)), indices
 
@@ -66,17 +98,21 @@ def get_CSI_score(args, features_in, features_unlabeled):
         # score = max_sim * torch.norm(f_u)
         sim_scores = torch.cat((sim_scores, max_sim.reshape(1)), 0)
 
+    # similarity = negative distance = nagative OODness
     return sim_scores.type(torch.float32).to(args.device).reshape((-1, 1))
 
 def standardize(scores):
     std, mean = torch.std_mean(scores, unbiased=False)
     scores = (scores - mean) / std
     scores = torch.exp(scores)
-    return scores
+    return scores, std, mean
 
 def construct_meta_input(informativeness, purity):
-    informativeness = standardize(informativeness)
-    purity = standardize(purity)
+    informativeness, std, mean = standardize(informativeness)
+    print("informativeness mean: {}, std: {}".format(mean, std))
+
+    purity, std, mean = standardize(purity)
+    print("purity mean: {}, std: {}".format(mean, std))
 
     meta_input = torch.cat((informativeness, purity), 1)
     return meta_input

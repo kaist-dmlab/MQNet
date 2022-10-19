@@ -28,7 +28,7 @@ class LL(ALMethod):
             for data in unlabeled_loader:
                 inputs = data[0].to(self.args.device)
 
-                scores, features = self.models['backbone'](inputs)
+                _, features = self.models['backbone'](inputs)
                 pred_loss = self.models['module'](features)  # pred_loss = criterion(scores, labels) # ground truth loss
                 pred_loss = pred_loss.view(pred_loss.size(0))
 

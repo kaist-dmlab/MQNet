@@ -2,8 +2,10 @@ from argparse import ArgumentTypeError
 from prefetch_generator import BackgroundGenerator
 from tqdm import tqdm
 import time
+import os
 import torch
 import torch.nn as nn
+from torchlars import LARS
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data.dataset import Subset
@@ -138,53 +140,89 @@ def csi_train(args, model, criterion, optimizer, scheduler, loader, simclr_aug=N
         scheduler.step()
     print('>> Finished, Elapsed Time: {}'.format(time.time()-time_start))
 
-def self_sup_train(args, models, optimizers, schedulers, train_dst, I_index, O_index, U_index):
+def self_sup_train(args, trial, models, optimizers, schedulers, train_dst, I_index, O_index, U_index):
     criterion = nn.CrossEntropyLoss()
 
     train_in_data = Subset(train_dst, I_index)
     train_ood_data = Subset(train_dst, O_index)
     train_unlabeled_data = Subset(train_dst, U_index)
-    print("CSI training, # in: {}, # ood: {}, # unlabeled: {}".format(len(train_in_data), len(train_ood_data), len(train_unlabeled_data)))
+    print("Self-sup training, # in: {}, # ood: {}, # unlabeled: {}".format(len(train_in_data), len(train_ood_data), len(train_unlabeled_data)))
 
     datalist = [train_in_data, train_ood_data, train_unlabeled_data]
     multi_datasets = torch.utils.data.ConcatDataset(datalist)
 
     if args.method == 'CCAL':
-        contrastive_loader = torch.utils.data.DataLoader(dataset=multi_datasets, batch_size=args.ccal_batch_size, shuffle=True)
-        simclr_aug = get_simclr_augmentation(args, image_size=(32, 32, 3)).to(args.device)  # for CIFAR10, 100
+        # if a pre-trained CSI exist, just load it
+        semantic_path = 'weights/'+ str(args.dataset)+'_r'+str(args.ood_rate)+'_semantic_' + str(trial) + '.pt'
+        distinctive_path = 'weights/'+ str(args.dataset)+'_r'+str(args.ood_rate)+'_distinctive_' + str(trial) + '.pt'
+        if os.path.isfile(semantic_path) and os.path.isfile(distinctive_path):
+            print('Load pre-trained semantic, distinctive models, named: {}, {}'.format(semantic_path, distinctive_path))
+            args.shift_trans, args.K_shift = get_shift_module(args, eval=True)
+            args.shift_trans = args.shift_trans.to(args.device)
+            models['semantic'].load_state_dict(torch.load(semantic_path))
+            models['distinctive'].load_state_dict(torch.load(distinctive_path))
+        else:
+            contrastive_loader = torch.utils.data.DataLoader(dataset=multi_datasets, batch_size=args.ccal_batch_size, shuffle=True)
+            simclr_aug = get_simclr_augmentation(args, image_size=(32, 32, 3)).to(args.device)  # for CIFAR10, 100
 
-        # Training the Semantic Coder
-        linear = models['semantic'].module.linear
-        linear_optim = torch.optim.Adam(linear.parameters(), lr=1e-3, betas=(.9, .999), weight_decay=args.weight_decay)
-        args.shift_trans_type = 'none'
-        args.shift_trans, args.K_shift = get_shift_module(args, eval=True)
-        args.shift_trans = args.shift_trans.to(args.device)
+            # Training the Semantic Coder
+            if args.data_parallel == True:
+                linear = models['semantic'].module.linear
+            else:
+                linear = models['semantic'].linear
+            linear_optim = torch.optim.Adam(linear.parameters(), lr=1e-3, betas=(.9, .999), weight_decay=args.weight_decay)
+            args.shift_trans_type = 'none'
+            args.shift_trans, args.K_shift = get_shift_module(args, eval=True)
+            args.shift_trans = args.shift_trans.to(args.device)
 
-        semantic_train(args, models['semantic'], criterion, optimizers['semantic'], schedulers['semantic'],
-                       contrastive_loader, simclr_aug, linear, linear_optim)
+            semantic_train(args, models['semantic'], criterion, optimizers['semantic'], schedulers['semantic'],
+                           contrastive_loader, simclr_aug, linear, linear_optim)
 
-        # Training the Distinctive Coder
-        linear = models['distinctive'].module.linear
-        linear_optim = torch.optim.Adam(linear.parameters(), lr=1e-3, betas=(.9, .999), weight_decay=args.weight_decay)
-        args.shift_trans_type = 'rotation'
-        args.shift_trans, args.K_shift = get_shift_module(args, eval=True)
-        args.shift_trans = args.shift_trans.to(args.device)
+            # Training the Distinctive Coder
+            if args.data_parallel == True:
+                linear = models['distinctive'].module.linear
+            else:
+                linear = models['distinctive'].linear
+            linear_optim = torch.optim.Adam(linear.parameters(), lr=1e-3, betas=(.9, .999), weight_decay=args.weight_decay)
+            args.shift_trans_type = 'rotation'
+            args.shift_trans, args.K_shift = get_shift_module(args, eval=True)
+            args.shift_trans = args.shift_trans.to(args.device)
 
-        distinctive_train(args, models['distinctive'], criterion, optimizers['distinctive'], schedulers['distinctive'],
-                          contrastive_loader, simclr_aug, linear, linear_optim)
+            distinctive_train(args, models['distinctive'], criterion, optimizers['distinctive'], schedulers['distinctive'],
+                              contrastive_loader, simclr_aug, linear, linear_optim)
+
+            # SSL save
+            if args.ssl_save == True:
+                torch.save(models['semantic'].state_dict(), semantic_path)
+                torch.save(models['distinctive'].state_dict(), distinctive_path)
 
     elif args.method == 'MQNet':
-        contrastive_loader = torch.utils.data.DataLoader(dataset=multi_datasets, batch_size=args.csi_batch_size, shuffle=True)
-        simclr_aug = get_simclr_augmentation(args, image_size=(32, 32, 3)).to(args.device)  # for CIFAR10, 100
-
-        # Training CSI
-        linear = models['csi'].module.linear
+        if args.data_parallel == True:
+            linear = models['csi'].module.linear
+        else:
+            linear = models['csi'].linear
         linear_optim = torch.optim.Adam(linear.parameters(), lr=1e-3, betas=(.9, .999), weight_decay=args.weight_decay)
         args.shift_trans_type = 'rotation'
         args.shift_trans, args.K_shift = get_shift_module(args, eval=True)
         args.shift_trans = args.shift_trans.to(args.device)
 
-        csi_train(args, models['csi'], criterion, optimizers['csi'], schedulers['csi'], contrastive_loader, simclr_aug, linear, linear_optim)
+        # if a pre-trained CSI exist, just load it
+        model_path = 'weights/'+ str(args.dataset)+'_r'+str(args.ood_rate)+'_csi_'+str(trial) + '.pt'
+        if os.path.isfile(model_path):
+            print('Load pre-trained CSI model, named: {}'.format(model_path))
+            models['csi'].load_state_dict(torch.load(model_path))
+        else:
+            contrastive_loader = torch.utils.data.DataLoader(dataset=multi_datasets, batch_size=args.csi_batch_size, shuffle=True)
+            simclr_aug = get_simclr_augmentation(args, image_size=(32, 32, 3)).to(args.device)  # for CIFAR10, 100
+
+            # Training CSI
+            csi_train(args, models['csi'], criterion, optimizers['csi'], schedulers['csi'],
+                      contrastive_loader, simclr_aug, linear, linear_optim)
+
+            # SSL save
+            if args.ssl_save == True:
+                torch.save(models['csi'].state_dict(), model_path)
+
     return models
 
 def mqnet_train_epoch(args, models, optimizers, criterion, delta_loader, meta_input_dict):
@@ -193,6 +231,7 @@ def mqnet_train_epoch(args, models, optimizers, criterion, delta_loader, meta_in
     batch_idx = 0
     while (batch_idx < args.steps_per_epoch):
         for data in delta_loader:
+            optimizers['mqnet'].zero_grad()
             inputs, labels, indexs = data[0].to(args.device), data[1].to(args.device), data[2].to(args.device)
 
             # get pred_scores through MQNet
@@ -205,17 +244,23 @@ def mqnet_train_epoch(args, models, optimizers, criterion, delta_loader, meta_in
             pred_scores = models['mqnet'](meta_inputs)
 
             # get target loss
-            labels = labels*in_ood_masks # make the label of OOD points to 0
+            mask_labels = labels*in_ood_masks # make the label of OOD points to 0
             #labels = labels.type(torch.LongTensor).to(args.device)
 
             out, features = models['backbone'](inputs)
-            true_loss = criterion(out, labels)  # ground truth loss
-            true_loss = in_ood_masks*true_loss # make the true_loss of OOD points to 0
+            true_loss = criterion(out, mask_labels)  # ground truth loss
+            mask_true_loss = in_ood_masks*true_loss # make the true_loss of OOD points to 0
 
-            loss = LossPredLoss(pred_scores, true_loss.reshape((-1, 1)), margin=1)
+            loss = LossPredLoss(pred_scores, mask_true_loss.reshape((-1, 1)), margin=1)
 
             loss.backward()
-            optimizers['mqnet'].zero_grad()
+            optimizers['mqnet'].step()
+
+            if args.mqnet_relu == False:
+                # Rather than applying Relu on each parameters of MQNet, we clamp it to be positive (more stable!)
+                for p in models['mqnet'].parameters():
+                    p.data.clamp_(0)
+
             batch_idx+=1
 
 def mqnet_train(args, models, optimizers, schedulers, criterion, delta_loader, meta_input_dict):
@@ -226,21 +271,25 @@ def mqnet_train(args, models, optimizers, schedulers, criterion, delta_loader, m
     print('>> Finished.')
 
 def meta_train(args, models, optimizers, schedulers, criterion, labeled_in_loader, delta_loader):
+    features_in = get_labeled_features(args, models, labeled_in_loader)
+
     if args.mqnet_mode == 'CONF':
-        # For enhancing efficiency, generate meta-input & in-ood masks all at once, save it in a dictionary
-        features_in = get_labeled_features(args, models, labeled_in_loader)
-        conf_scores, features_delta, in_ood_masks, indices = get_unlabeled_features(args, models, delta_loader)
-        csi_scores = get_CSI_score(args, features_in, features_delta)
-        meta_input = construct_meta_input(conf_scores, csi_scores)
-        #print(meta_input.shape, in_ood_masks.shape) #[500, 2] [500]
+        informativeness, features_delta, in_ood_masks, indices = get_unlabeled_features(args, models, delta_loader)
+    elif args.mqnet_mode == 'LL':
+        informativeness, features_delta, in_ood_masks, indices = get_unlabeled_features_LL(args, models, delta_loader)
 
-        meta_input_dict = {}
-        for i, idx in enumerate(indices):
-            meta_input_dict[idx.item()] = [meta_input[i].to(args.device), in_ood_masks[i]]
+    purity = get_CSI_score(args, features_in, features_delta)
+    assert len(informativeness) == len(purity)
 
-        # Mini-batch Training
-        mqnet_train(args, models, optimizers, schedulers, criterion, delta_loader, meta_input_dict)
-    # TODO: LL
+    meta_input = construct_meta_input(informativeness, purity)
+
+    # For enhancing training efficiency, generate meta-input & in-ood masks once, and save it into a dictionary
+    meta_input_dict = {}
+    for i, idx in enumerate(indices):
+        meta_input_dict[idx.item()] = [meta_input[i].to(args.device), in_ood_masks[i]]
+
+    # Mini-batch Training
+    mqnet_train(args, models, optimizers, schedulers, criterion, delta_loader, meta_input_dict)
 
     return models
 
@@ -317,6 +366,18 @@ def train(args, models, criterion, optimizers, schedulers, dataloaders):
             train_epoch_LL(args, models, epoch, criterion, optimizers, dataloaders)
             schedulers['backbone'].step()
             schedulers['module'].step()
+
+    elif args.method in ['MQNet']: #MQNet
+        if args.mqnet_mode == "CONF":
+            for epoch in tqdm(range(args.epochs), leave=False, total=args.epochs):
+                train_epoch(args, models, criterion, optimizers, dataloaders)
+                schedulers['backbone'].step()
+        elif args.mqnet_mode == "LL":
+            for epoch in tqdm(range(args.epochs), leave=False, total=args.epochs):
+                train_epoch_LL(args, models, epoch, criterion, optimizers, dataloaders)
+                schedulers['backbone'].step()
+                schedulers['module'].step()
+
     print('>> Finished.')
 
 def test(args, models, dataloaders):
@@ -417,17 +478,17 @@ def get_more_args(args):
     if args.dataset == 'CIFAR10':
         args.channel = 3
         args.im_size = (32, 32)
-        args.num_IN_class = 4
+        #args.num_IN_class = 4
 
     elif args.dataset == 'CIFAR100':
         args.channel = 3
         args.im_size = (32, 32)
-        args.num_IN_class = 40
+        #args.num_IN_class = 40
 
-    elif args.dataset == 'ImageNet':
+    elif args.dataset == 'ImageNet50':
         args.channel = 3
         args.im_size = (224, 224)
-        args.num_IN_class = 50
+        #args.num_IN_class = 50
 
     return args
 
@@ -438,7 +499,7 @@ def get_models(args, nets, model):
         backbone = nets.__dict__[model](args.channel, args.num_IN_class, args.im_size).to(args.device)
         if args.device == "cpu":
             print("Using CPU.")
-        else:
+        elif args.data_parallel == True:
             backbone = nets.nets_utils.MyDataParallel(backbone, device_ids=args.gpu)
         models = {'backbone': backbone}
 
@@ -447,7 +508,7 @@ def get_models(args, nets, model):
         backbone = nets.__dict__[model](args.channel, args.num_IN_class+1, args.im_size).to(args.device)
         if args.device == "cpu":
             print("Using CPU.")
-        else:
+        elif args.data_parallel == True:
             backbone = nets.nets_utils.MyDataParallel(backbone, device_ids=args.gpu)
         models = {'backbone': backbone}
 
@@ -459,7 +520,7 @@ def get_models(args, nets, model):
 
         if args.device == "cpu":
             print("Using CPU.")
-        else:
+        elif args.data_parallel == True:
             backbone = nets.nets_utils.MyDataParallel(backbone, device_ids=args.gpu)
             loss_module = nets.nets_utils.MyDataParallel(loss_module, device_ids=args.gpu)
 
@@ -474,7 +535,7 @@ def get_models(args, nets, model):
         model_dis = nets.__dict__[model_](args.channel, args.num_IN_class, args.im_size).to(args.device)
         if args.device == "cpu":
             print("Using CPU.")
-        else:
+        elif args.data_parallel == True:
             backbone = nets.nets_utils.MyDataParallel(backbone, device_ids=args.gpu)
             model_sem = nets.nets_utils.MyDataParallel(model_sem, device_ids=args.gpu)
             model_dis = nets.nets_utils.MyDataParallel(model_dis, device_ids=args.gpu)
@@ -490,11 +551,14 @@ def get_models(args, nets, model):
         model_ = model + '_CSI'
         model_csi = nets.__dict__[model_](args.channel, args.num_IN_class, args.im_size).to(args.device)
 
-        mqnet = nets.__dict__['QueryNet'](input_size=2, inter_dim=64).to(args.device)
+        if args.mqnet_relu == False:
+            mqnet = nets.__dict__['QueryNet'](input_size=2, inter_dim=64).to(args.device)
+        elif args.mqnet_relu == True:
+            mqnet = nets.__dict__['QueryNet2'](input_size=2, inter_dim=64).to(args.device)
 
         if args.device == "cpu":
             print("Using CPU.")
-        else:
+        elif args.data_parallel == True:
             backbone = nets.nets_utils.MyDataParallel(backbone, device_ids=args.gpu)
             loss_module = nets.nets_utils.MyDataParallel(loss_module, device_ids=args.gpu)
             model_csi = nets.nets_utils.MyDataParallel(model_csi, device_ids=args.gpu)
@@ -557,8 +621,10 @@ def get_optim_configurations(args, models):
         optim_module = torch.optim.SGD(models['module'].parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
         sched_module = torch.optim.lr_scheduler.MultiStepLR(optim_module, milestones=args.milestone)
 
-        optim_csi = torch.optim.SGD(models['csi'].parameters(), lr=args.lr, weight_decay=args.weight_decay)
-        sched_csi = torch.optim.lr_scheduler.CosineAnnealingLR(optim_csi, args.epochs_csi, eta_min=args.min_lr)
+        optimizer_csi = torch.optim.SGD(models['csi'].parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-6)
+        optim_csi = LARS(optimizer_csi, eps=1e-8, trust_coef=0.001)
+
+        sched_csi = torch.optim.lr_scheduler.CosineAnnealingLR(optim_csi, args.epochs_csi)
         scheduler_warmup_csi = GradualWarmupScheduler(optim_csi, multiplier=10.0, total_epoch=args.warmup, after_scheduler=sched_csi)
 
         optim_mqnet = torch.optim.SGD(models['mqnet'].parameters(), lr=args.lr_mqnet, weight_decay=args.weight_decay)

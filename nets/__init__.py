@@ -13,3 +13,4 @@ from .resnet_CSI import *
 #from .wideresnet import *
 from .lossnet import *
 from .querynet import *
+from .querynet2 import *

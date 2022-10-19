@@ -1,7 +1,5 @@
 from torchvision import datasets
 from torch.utils.data.dataset import Dataset
-from torchvision import transforms as T
-from torch import tensor, long
 import numpy as np
 
 class MyCIFAR10(Dataset):

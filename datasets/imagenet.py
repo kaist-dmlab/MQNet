@@ -3,32 +3,23 @@ import torchvision.transforms as T
 from torch.utils.data import Dataset, DataLoader
 from torchvision.datasets import ImageFolder
 from torch import tensor, long
+import numpy as np
 
 class MyImageNet(Dataset):
-    def __init__(self, file_path, transform=None, resolution=224):
+    def __init__(self, file_path, transform=None):
         self.transform = transform
-        self.resolution = resolution
-        if self.resolution == 224: #32, 64, 128
-            self.data = ImageFolder(file_path)
-        else:
-            print("Resizing Initial Data into {}x{}".format(self.resolution, self.resolution))
-            transform_resize = T.Resize(size=(self.resolution,self.resolution)) #reduce the resolution once at an initial point
-            self.data = ImageFolder(file_path, transform_resize)
-
+        self.data = ImageFolder(file_path)
+        self.targets = np.array(self.data.targets)
         self.classes = self.data.classes
-        self.targets = self.data.targets
 
     def __getitem__(self, index):
-        # id = self.id_sample[index]
-        img, label = self.data[index]
-
-        # TODO:
-        #target = self.targets[index]
+        img, _ = self.data[index]
+        target = self.targets[index]
 
         if self.transform is not None:
             img = self.transform(img)
 
-        return img, label#, index
+        return img, target, index
 
     def __len__(self):
         return len(self.data)

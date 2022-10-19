@@ -12,12 +12,14 @@ class BaseModel(nn.Module, metaclass=ABCMeta):
         )
         self.shift_cls_layer = nn.Linear(last_dim, 4)
         self.joint_distribution_layer = nn.Linear(last_dim, 4 * num_classes)
+        '''
         self.shift_dis = nn.Sequential(
             nn.Linear(simclr_dim*2, simclr_dim),
             nn.ReLU(),
             nn.Linear(simclr_dim, 1),
             nn.Sigmoid()
         )
+        '''
 
     @abstractmethod
     def penultimate(self, inputs, all_features=False):

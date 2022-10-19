@@ -8,6 +8,7 @@ import numpy as np
 
 # P == args
 def csi_train_epoch(P, epoch, model, criterion, optimizer, scheduler, loader, simclr_aug=None, linear=None, linear_optim=None):
+
     assert simclr_aug is not None
     assert P.sim_lambda == 1.0  # to avoid mistake
     assert P.K_shift > 1
@@ -79,7 +80,7 @@ def csi_train_epoch(P, epoch, model, criterion, optimizer, scheduler, loader, si
         outputs_linear_eval = linear(outputs_aux['penultimate'].detach())
         # loss_linear = criterion(outputs_linear_eval, labels.repeat(2))
 
-        idx = np.where(labels.cpu().numpy() < P.target_number)[0]
+        idx = np.where(labels.cpu().numpy() < P.num_IN_class)[0]
         loss_linear = criterion(outputs_linear_eval[idx], labels[idx].type(torch.LongTensor).to(P.device))  # .repeat(2)
 
         linear_optim.zero_grad()
