@@ -66,7 +66,7 @@ scipy: 1.5.4
 </p>
 
 * Above figures are AL performance on CIFAR10 mixed with SVHN at the open-set noise ratio of 50% (1:1 mixing)
-* With a such high noise ratio, uncertainty- and diversity-based algorithms queried many OOD examples and are even worse than random selection
+* With a such high noise ratio, uncertainty- and diversity-based algorithms queried many OOD examples and thus become even worse than random selection
 
 ### Purity-Informativeness Dilemma in Open-set Active Learning
 
