@@ -78,7 +78,7 @@ scipy: 1.5.4
 </p>
 
 * **Increasing purity ↔ Losing Informativeness** --> Trade-off!
-* Which is more helpful? Fewer but more informative examples vs More but less informative examples
+* Which is more helpful? _Fewer but more informative examples_ vs _More but less informative examples_
 * Optimal trade-off may **change** according to the AL rounds & noise ratios!
 
 ### MQ-Net
