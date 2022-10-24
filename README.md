@@ -77,7 +77,7 @@ scipy: 1.5.4
 <img src="figures/Purity_informativeness_dilemma.png" width="900"> 
 </p>
 
-* **Increasing purity ↔ Loss of Informativeness** --> Trade-off!
+* **Increasing purity ↔ Losing Informativeness** --> Trade-off!
 * Which is more helpful? Fewer but more informative examples vs More but less informative examples
 * Optimal trade-off may **change** according to the AL rounds & noise ratios!
 
