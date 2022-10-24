@@ -7,8 +7,6 @@ by [Dongmin Park](https://scholar.google.com/citations?user=4xXYQl0AAAAJ&hl=ko)<
 * **`Oct 19, 2022`:** **Our work is publicly available at [ArXiv](https://arxiv.org/pdf/2210.07805.pdf).**
 * **To be published in NeurIPS 2022.**
 
-## The complete code will be available soon
-
 # How to run
 
 ### MQ-Net 
@@ -99,7 +97,12 @@ scipy: 1.5.4
 
 # Citation
 
-BibTeX will be available soon
+@article{park2022meta,
+  title={Meta-Query-Net: Resolving Purity-Informativeness Dilemma in Open-set Active Learning},
+  author={Park, Dongmin and Shin, Yooju and Bang, Jihwan and Lee, Youngjun and Song, Hwanjun and Lee, Jae-Gil},
+  journal={NeurIPS 2022},
+  year={2022}
+}
 
 
 # References
