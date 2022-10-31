@@ -19,6 +19,39 @@ def get_labeled_features(args, models, labeled_in_loader):
         features_in = torch.cat((features_in, couts['simclr'].detach()), 0)
     return features_in
 
+def get_unlabeled_features_LL_with_U(args, models, delta_loader, unlabeled_loader):
+    models['csi'].eval()
+    layers = ('simclr', 'shift')
+    if not isinstance(layers, (list, tuple)):
+        layers = [layers]
+    kwargs = {layer: True for layer in layers}
+
+    # generate entire unlabeled features set
+    features_unlabeled = torch.tensor([]).to(args.device)
+    pred_loss = torch.tensor([]).to(args.device)
+    in_ood_masks = torch.tensor([]).type(torch.LongTensor).to(args.device)
+    indices = torch.tensor([]).type(torch.LongTensor).to(args.device)
+
+    for data in delta_loader:
+        inputs = data[0].to(args.device)
+        labels = data[1].to(args.device)
+        index = data[2].to(args.device)
+
+        in_ood_mask = labels.le(args.num_IN_class - 1).type(torch.LongTensor).to(args.device)
+        in_ood_masks = torch.cat((in_ood_masks, in_ood_mask.detach()), 0)
+
+        out, couts = models['csi'](inputs, **kwargs)
+        features_unlabeled = torch.cat((features_unlabeled, couts['simclr'].detach()), 0)
+
+        out, features = models['backbone'](inputs)
+        pred_l = models['module'](features)  # pred_loss = criterion(scores, labels) # ground truth loss
+        pred_l = pred_l.view(pred_l.size(0))
+        pred_loss = torch.cat((pred_loss, pred_l.detach()), 0)
+
+        indices = torch.cat((indices, index), 0)
+
+    return pred_loss.reshape((-1, 1)), features_unlabeled, in_ood_masks.reshape((-1, 1)), indices
+
 def get_unlabeled_features_LL(args, models, unlabeled_loader):
     models['csi'].eval()
     layers = ('simclr', 'shift')
@@ -107,6 +140,12 @@ def standardize(scores):
     scores = torch.exp(scores)
     return scores, std, mean
 
+def standardize_with_U(scores, scores_U):
+    std, mean = torch.std_mean(scores_U, unbiased=False)
+    scores = (scores - mean) / std
+    scores = torch.exp(scores)
+    return scores, std, mean
+
 def construct_meta_input(informativeness, purity):
     informativeness, std, mean = standardize(informativeness)
     print("informativeness mean: {}, std: {}".format(mean, std))
@@ -114,5 +153,19 @@ def construct_meta_input(informativeness, purity):
     purity, std, mean = standardize(purity)
     print("purity mean: {}, std: {}".format(mean, std))
 
+    # TODO:
+    meta_input = torch.cat((informativeness, purity), 1)
+    return meta_input
+
+def construct_meta_input_with_U(informativeness, purity, args, models, unlabeled_loader):
+    informativeness_U, _, _, _ = get_unlabeled_features(args, models, unlabeled_loader)
+
+    scores, std, mean = standardize_with_U(informativeness, informativeness_U)
+    print("informativeness mean: {}, std: {}".format(mean, std))
+
+    purity, std, mean = standardize(purity)
+    print("purity mean: {}, std: {}".format(mean, std))
+
+    # TODO:
     meta_input = torch.cat((informativeness, purity), 1)
     return meta_input

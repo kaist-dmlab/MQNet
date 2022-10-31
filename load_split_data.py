@@ -100,10 +100,10 @@ def get_dataset(args, trial):
         args.num_IN_class = 4
     elif args.dataset == 'CIFAR100':
         args.input_size = 32 * 32 * 3
-        args.target_lists = [[33, 10, 74, 72, 88, 47, 27, 68, 60, 75, 45, 79, 92, 35, 86, 50, 18,
-            61, 49, 29, 23, 30, 67, 73, 82, 94, 13, 37, 39, 26, 62, 22, 90, 53, 89, 11,  3, 20, 70, 96], \
-                            [69,  8, 86, 18, 68, 30, 75,  3, 63, 76, 72,  7, 50, 81, 46, 89, 22,
+        args.target_lists = [[69,  8, 86, 18, 68, 30, 75,  3, 63, 76, 72,  7, 50, 81, 46, 89, 22,
             93, 62, 21, 33, 98, 82, 20, 60,  5, 77,  1, 74, 88, 57, 34, 43, 27, 66, 83, 25, 48,  4, 55], \
+                            [33, 10, 74, 72, 88, 47, 27, 68, 60, 75, 45, 79, 92, 35, 86, 50, 18,
+            61, 49, 29, 23, 30, 67, 73, 82, 94, 13, 37, 39, 26, 62, 22, 90, 53, 89, 11,  3, 20, 70, 96], \
                             [70, 28, 60, 22, 39, 35, 73, 13, 74, 10,  2, 16, 80, 53, 67, 66, 78,
             46, 26, 71, 43, 38, 42, 14, 50, 77, 20, 48, 52,  8, 54, 58, 91,  5, 25, 90, 61, 11, 59, 55], \
                             [ 7, 93, 37, 84, 57, 99, 10, 75, 54, 42, 26, 27, 47, 52, 61, 86, 60,
@@ -253,77 +253,3 @@ def get_sub_test_dataset(args, dataset):
     elif args.dataset == 'ImageNet50':
         labeled_index = [dataset[i][2] for i in args.in_test_indices]
     return labeled_index
-
-'''
-def get_sub_unlabeled_dataset(dataset, select_L_index,select_O_index, target_list, num_images):
-    all_index = set(np.arange(num_images))
-    select_index = select_L_index + select_O_index
-    unlabeled_indices = list(np.setdiff1d(list(all_index),select_index))  # find indices which is in all_indices but not in current_indices
-
-    unlabeled_L_index = []
-    unlabeled_O_index = []
-    for i in unlabeled_indices:
-        if dataset[i][1] in target_list:
-            unlabeled_L_index.append(i)
-        else:
-            unlabeled_O_index.append(i)
-    datasey_UL = Subset(dataset, unlabeled_L_index)
-    datasey_UO = Subset(dataset, unlabeled_O_index)
-    dataset_U = Subset(dataset, unlabeled_indices)
-
-    return dataset_U, datasey_UL, datasey_UO, unlabeled_indices, unlabeled_L_index, unlabeled_O_index
-
-def get_unlabeled_dataset(dataset, select_L_index, target_list,mismatch, num_images):
-
-    all_index = set(np.arange(num_images))
-    unlabeled_indices = list(np.setdiff1d(list(all_index),select_L_index))  # find indices which is in all_indices but not in current_indices
-
-    unlabeled_L_index = []
-    unlabeled_O_index = []
-    for i in unlabeled_indices:
-        if dataset[i][1] in target_list:
-            unlabeled_L_index.append(i)
-        else:
-            unlabeled_O_index.append(i)
-
-    target_number = len(unlabeled_L_index)
-    others_number = math.ceil((mismatch*target_number)/(1-mismatch))
-
-    select_O_index = random.sample(unlabeled_O_index, others_number)
-    unlabeled_index = unlabeled_L_index + select_O_index
-    #dataset_U = Subset(dataset, unlabeled_index)
-
-    return unlabeled_index
-
-def get_mismatch_contrast_dataset(dataset, select_L_index, target_list,mismatch, num_images):
-    all_index = set(np.arange(num_images))
-    unlabeled_indices = list(np.setdiff1d(list(all_index),select_L_index))  # find indices which is in all_indices but not in current_indices
-
-    unlabeled_L_index = []
-    unlabeled_O_index = []
-    for i in unlabeled_indices:
-        if dataset[i][1] in target_list:
-            unlabeled_L_index.append(i)
-        else:
-            unlabeled_O_index.append(i)
-
-    target_number = len(unlabeled_L_index)
-    others_number = math.ceil((mismatch*target_number)/(1-mismatch))
-
-    select_O_index = random.sample(unlabeled_O_index, others_number)
-    unlabeled_index = unlabeled_L_index + select_O_index
-    contrast_index = unlabeled_index + select_L_index
-
-    random.shuffle(contrast_index)
-    dataset_contrast = Subset(dataset, contrast_index)
-
-    return dataset_contrast,contrast_index
-
-def get_label_index(dataset, L_index,args):
-    label_i_index = [[] for i in range(len(args.target_list))]
-    for i in L_index:
-        for k in range(len(args.target_list)):
-            if dataset[i][1] == args.target_list[k]:
-                label_i_index[k].append(i)
-    return label_i_index
-'''

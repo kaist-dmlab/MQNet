@@ -77,7 +77,7 @@ class ResNet_32x32(nn.Module):
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        self.linear = nn.Linear(512 * block.expansion, num_classes)
+        self.linear = nn.Linear(512 * block.expansion, num_classes, bias=False)
 
         self.embedding_recorder = EmbeddingRecorder(record_embedding)
         self.no_grad = no_grad
@@ -115,7 +115,7 @@ class ResNet_224x224(resnet.ResNet):
         if channel != 3:
             self.conv1 = nn.Conv2d(channel, 64, kernel_size=7, stride=2, padding=3, bias=False)
         if num_classes != 1000:
-            self.fc = nn.Linear(self.fc.in_features, num_classes)
+            self.fc = nn.Linear(self.fc.in_features, num_classes, bias=False)
         self.no_grad = no_grad
 
     def get_last_layer(self):

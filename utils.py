@@ -228,6 +228,7 @@ def self_sup_train(args, trial, models, optimizers, schedulers, train_dst, I_ind
 def mqnet_train_epoch(args, models, optimizers, criterion, delta_loader, meta_input_dict):
     models['mqnet'].train()
     models['backbone'].eval()
+
     batch_idx = 0
     while (batch_idx < args.steps_per_epoch):
         for data in delta_loader:
@@ -244,24 +245,18 @@ def mqnet_train_epoch(args, models, optimizers, criterion, delta_loader, meta_in
             pred_scores = models['mqnet'](meta_inputs)
 
             # get target loss
-            mask_labels = labels*in_ood_masks # make the label of OOD points to 0
-            #labels = labels.type(torch.LongTensor).to(args.device)
+            mask_labels = labels*in_ood_masks # make the label of OOD points to 0 (to calculate loss)
 
             out, features = models['backbone'](inputs)
             true_loss = criterion(out, mask_labels)  # ground truth loss
-            mask_true_loss = in_ood_masks*true_loss # make the true_loss of OOD points to 0
+            mask_true_loss = true_loss*in_ood_masks # make the true_loss of OOD points to 0
 
             loss = LossPredLoss(pred_scores, mask_true_loss.reshape((-1, 1)), margin=1)
 
             loss.backward()
             optimizers['mqnet'].step()
 
-            if args.mqnet_relu == False:
-                # Rather than applying Relu on each parameters of MQNet, we clamp it to be positive (more stable!)
-                for p in models['mqnet'].parameters():
-                    p.data.clamp_(0)
-
-            batch_idx+=1
+            batch_idx += 1
 
 def mqnet_train(args, models, optimizers, schedulers, criterion, delta_loader, meta_input_dict):
     print('>> Train MQNet.')
@@ -270,7 +265,7 @@ def mqnet_train(args, models, optimizers, schedulers, criterion, delta_loader, m
         schedulers['mqnet'].step()
     print('>> Finished.')
 
-def meta_train(args, models, optimizers, schedulers, criterion, labeled_in_loader, delta_loader):
+def meta_train(args, models, optimizers, schedulers, criterion, labeled_in_loader, unlabeled_loader, delta_loader):
     features_in = get_labeled_features(args, models, labeled_in_loader)
 
     if args.mqnet_mode == 'CONF':
@@ -279,9 +274,12 @@ def meta_train(args, models, optimizers, schedulers, criterion, labeled_in_loade
         informativeness, features_delta, in_ood_masks, indices = get_unlabeled_features_LL(args, models, delta_loader)
 
     purity = get_CSI_score(args, features_in, features_delta)
-    assert len(informativeness) == len(purity)
+    assert informativeness.shape == purity.shape
 
-    meta_input = construct_meta_input(informativeness, purity)
+    if args.mqnet_mode == 'CONF':
+        meta_input = construct_meta_input(informativeness, purity)
+    elif args.mqnet_mode == 'LL':
+        meta_input = construct_meta_input_with_U(informativeness, purity, args, models, unlabeled_loader)
 
     # For enhancing training efficiency, generate meta-input & in-ood masks once, and save it into a dictionary
     meta_input_dict = {}
@@ -312,7 +310,7 @@ def train_epoch_LL(args, models, epoch, criterion, optimizers, dataloaders):
 
             # loss module for predLoss
             if epoch > args.epoch_loss:
-                # After 120 epochs, stop the gradient from the loss prediction module propagated to the target ALOOD_OURS.
+                # After 120 epochs, stop the gradient from the loss prediction module
                 features[0] = features[0].detach()
                 features[1] = features[1].detach()
                 features[2] = features[2].detach()
@@ -385,21 +383,18 @@ def test(args, models, dataloaders):
 
     # Switch to evaluate mode
     models['backbone'].eval()
-    models['backbone'].no_grad = True
+    with torch.no_grad():
+        for i, data in enumerate(dataloaders['test']):
+            inputs, labels = data[0].to(args.device), data[1].to(args.device)
 
-    for i, data in enumerate(dataloaders['test']):
-        inputs, labels = data[0].to(args.device), data[1].to(args.device)
+            # Compute output
+            with torch.no_grad():
+                scores, _ = models['backbone'](inputs)
 
-        # Compute output
-        with torch.no_grad():
-            scores, _ = models['backbone'](inputs)
-
-        # Measure accuracy and record loss
-        prec1 = accuracy(scores.data, labels, topk=(1,))[0]
-        top1.update(prec1.item(), inputs.size(0))
-    print('Test acc: * Prec@1 {top1.avg:.3f}'.format(top1=top1))
-
-    models['backbone'].no_grad = False
+            # Measure accuracy and record loss
+            prec1 = accuracy(scores.data, labels, topk=(1,))[0]
+            top1.update(prec1.item(), inputs.size(0))
+        print('Test acc: * Prec@1 {top1.avg:.3f}'.format(top1=top1))
 
     return top1.avg
 
@@ -427,7 +422,6 @@ class AverageMeter(object):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
         return fmtstr.format(**self.__dict__)
 
-
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.no_grad():
@@ -444,8 +438,6 @@ def accuracy(output, target, topk=(1,)):
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
 
-
-
 def str_to_bool(v):
     # Handle boolean type in arguments.
     if isinstance(v, bool):
@@ -456,12 +448,6 @@ def str_to_bool(v):
         return False
     else:
         raise ArgumentTypeError('Boolean value expected.')
-
-
-def save_checkpoint(state, path, epoch, prec):
-    print("=> Saving checkpoint for epoch %d, with Prec@1 %f." % (epoch, prec))
-    torch.save(state, path)
-
 
 def get_more_args(args):
     cuda = ""
@@ -492,8 +478,7 @@ def get_more_args(args):
 
     return args
 
-
-def get_models(args, nets, model):
+def get_models(args, nets, model, models):
     # Normal
     if args.method in ['Random', 'Uncertainty', 'Coreset', 'BADGE']:
         backbone = nets.__dict__[model](args.channel, args.num_IN_class, args.im_size).to(args.device)
@@ -540,7 +525,10 @@ def get_models(args, nets, model):
             model_sem = nets.nets_utils.MyDataParallel(model_sem, device_ids=args.gpu)
             model_dis = nets.nets_utils.MyDataParallel(model_dis, device_ids=args.gpu)
 
-        models = {'backbone': backbone, 'semantic': model_sem, 'distinctive': model_dis}
+        if models == None: #initial round
+            models = {'backbone': backbone, 'semantic': model_sem, 'distinctive': model_dis}
+        else:
+            models['backbone'] = backbone
 
     # MQNet
     elif args.method == 'MQNet':
@@ -551,11 +539,6 @@ def get_models(args, nets, model):
         model_ = model + '_CSI'
         model_csi = nets.__dict__[model_](args.channel, args.num_IN_class, args.im_size).to(args.device)
 
-        if args.mqnet_relu == False:
-            mqnet = nets.__dict__['QueryNet'](input_size=2, inter_dim=64).to(args.device)
-        elif args.mqnet_relu == True:
-            mqnet = nets.__dict__['QueryNet2'](input_size=2, inter_dim=64).to(args.device)
-
         if args.device == "cpu":
             print("Using CPU.")
         elif args.data_parallel == True:
@@ -563,8 +546,23 @@ def get_models(args, nets, model):
             loss_module = nets.nets_utils.MyDataParallel(loss_module, device_ids=args.gpu)
             model_csi = nets.nets_utils.MyDataParallel(model_csi, device_ids=args.gpu)
 
-        models = {'backbone': backbone, 'module': loss_module, 'csi': model_csi, 'mqnet': mqnet}
+        if models == None: #initial round
+            models = {'backbone': backbone, 'module': loss_module, 'csi': model_csi} #, 'mqnet': mqnet
+        else:
+            models['backbone'] = backbone
+            models['module'] = loss_module
+
     return models
+
+def init_mqnet(args, nets, models, optimizers, schedulers):
+    models['mqnet'] = nets.__dict__['QueryNet'](input_size=2, inter_dim=64).to(args.device)
+
+    optim_mqnet = torch.optim.SGD(models['mqnet'].parameters(), lr=args.lr_mqnet)
+    sched_mqnet = torch.optim.lr_scheduler.MultiStepLR(optim_mqnet, milestones=[int(args.epochs_mqnet / 2)])
+
+    optimizers['mqnet'] = optim_mqnet
+    schedulers['mqnet'] = sched_mqnet
+    return models, optimizers, schedulers
 
 def get_optim_configurations(args, models):
     print("lr: {}, momentum: {}, decay: {}".format(args.lr, args.momentum, args.weight_decay))
@@ -627,10 +625,7 @@ def get_optim_configurations(args, models):
         sched_csi = torch.optim.lr_scheduler.CosineAnnealingLR(optim_csi, args.epochs_csi)
         scheduler_warmup_csi = GradualWarmupScheduler(optim_csi, multiplier=10.0, total_epoch=args.warmup, after_scheduler=sched_csi)
 
-        optim_mqnet = torch.optim.SGD(models['mqnet'].parameters(), lr=args.lr_mqnet, weight_decay=args.weight_decay)
-        sched_mqnet = torch.optim.lr_scheduler.MultiStepLR(optim_module, milestones=[int(args.epochs_mqnet/2)])
-
-        optimizers = {'backbone': optimizer, 'module': optim_module, 'csi': optim_csi, 'mqnet': optim_mqnet}
-        schedulers = {'backbone': scheduler, 'module': sched_module, 'csi': scheduler_warmup_csi, 'mqnet': sched_mqnet}
+        optimizers = {'backbone': optimizer, 'module': optim_module, 'csi': optim_csi}
+        schedulers = {'backbone': scheduler, 'module': sched_module, 'csi': scheduler_warmup_csi}
 
     return criterion, optimizers, schedulers

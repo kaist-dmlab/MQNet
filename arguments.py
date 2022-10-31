@@ -44,7 +44,7 @@ parser.add_argument('--epochs', default=200, type=int, help='number of total epo
 parser.add_argument('--epoch-loss', default=120, type=int, help='number of epochs for training loss module in LL')
 parser.add_argument('--epochs-ccal', default=700, type=int, help='number of epochs for training contrastive coders in CCAL')
 parser.add_argument('--epochs-csi', default=1000, type=int, help='number of epochs for training CSI')
-parser.add_argument('--epochs-mqnet', default=1000, type=int, help='number of epochs for training CSI')
+parser.add_argument('--epochs-mqnet', default=100, type=int, help='number of epochs for training mqnet')
 parser.add_argument('--steps-per-epoch', type=int, default=150, metavar='N',
                     help='number of epochs to train (default: 200)')
 parser.add_argument('--batch-size', "-b", default=64, type=int, metavar='N')
@@ -73,7 +73,6 @@ parser.add_argument('--k', help='Initial learning rate', default=100.0, type=flo
 parser.add_argument('--t', help='Initial learning rate', default=0.9, type=float)
 # for MQNet
 parser.add_argument('--mqnet-mode', default="CONF", help="specifiy the mode of MQNet to use") #CONF, LL
-parser.add_argument('--mqnet-relu', default=True, type=str_to_bool, help="whether save ssl model or not")
 
 # Checkpoint and resumption
 parser.add_argument('--save_path', "-sp", type=str, default='', help='path to save results (default: do not save)')

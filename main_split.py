@@ -57,11 +57,12 @@ if __name__ == '__main__':
 
         # Active learning
         logs = []
+        models = None
         for cycle in range(args.cycle):
             print("====================Cycle: {}====================".format(cycle + 1))
             # Model (re)initialization
             print("| Training on model %s" % args.model)
-            models = get_models(args, nets, args.model)
+            models = get_models(args, nets, args.model, models)
             torch.backends.cudnn.benchmark = False
 
             # Loss, criterion and scheduler (re)initialization
@@ -93,15 +94,17 @@ if __name__ == '__main__':
             ALmethod = methods.__dict__[args.method](args, models, unlabeled_dst, U_index, **selection_args)
             Q_index, Q_scores = ALmethod.select()
 
+            # Update Indices
             I_index, O_index, U_index, in_cnt = get_sub_train_dataset(args, train_dst, I_index, O_index, U_index, Q_index, initial=False)
-
             print("# Labeled_in: {}, # Labeled_ood: {}, # Unlabeled: {}".format(
                 len(set(I_index)), len(set(O_index)), len(set(U_index))))
 
-            # Only for MQNet
+            # Meta-training MQNet
             if args.method == 'MQNet':
-                delta_loader = DataLoader(train_dst, sampler=SubsetRandomSampler(Q_index), batch_size=max(1, args.batch_size), num_workers=args.workers)
-                models = meta_train(args, models, optimizers, schedulers, criterion, dataloaders['train'], delta_loader)
+                models, optimizers, schedulers = init_mqnet(args, nets, models, optimizers, schedulers)
+                unlabeled_loader = DataLoader(unlabeled_dst, sampler=SubsetRandomSampler(U_index), batch_size=args.test_batch_size, num_workers=args.workers)
+                delta_loader = DataLoader(train_dst, sampler=SubsetRandomSampler(Q_index), batch_size=max(1, args.csi_batch_size), num_workers=args.workers)
+                models = meta_train(args, models, optimizers, schedulers, criterion, dataloaders['train'], unlabeled_loader, delta_loader)
 
             # Update trainloader
             if args.dataset in ['CIFAR10', 'CIFAR100']:
@@ -120,5 +123,5 @@ if __name__ == '__main__':
 
         file_name = 'logs/'+str(args.dataset)+'/r'+str(args.ood_rate)+'_t'+str(trial)+'_'+str(args.method)
         if args.method == 'MQNet':
-            file_name = file_name+'_'+str(args.mqnet_mode)
+            file_name = file_name+'_'+str(args.mqnet_mode)+'_v3_b64'
         np.savetxt(file_name, logs, fmt='%.4f', delimiter=',')
