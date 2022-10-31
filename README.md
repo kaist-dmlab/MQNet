@@ -27,7 +27,7 @@ python3 main_split.py --epochs 200 --epochs-csi 1000 --epochs-mqnet 100 --datset
                       --method 'MQNet' --mqnet-mode 'LL' --ssl-save True --ood-rate 0.6
 ```
 
-* For ease of expedition, we provide CSI pre-trained models for split-experiment on CIFAR10 and CIFAR100 datasets below
+* For ease of expedition, we provide CSI pre-trained models for split-experiment below
 
 Noise Ratio | Architecture | CIFAR10 | CIFAR100 
 -- | -- | -- | --
