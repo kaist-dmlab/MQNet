@@ -7,7 +7,7 @@ parser = argparse.ArgumentParser(description='Parameter Processing')
 
 # Basic arguments
 parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset') #CIFAR10, CIFAR100, ImageNet50
-parser.add_argument('--data_path', type=str, default='../data', help='dataset path')
+parser.add_argument('--data_path', type=str, default='data', help='dataset path')
 parser.add_argument('--gpu', default=None, nargs="+", type=int, help='GPU id to use')
 parser.add_argument("--data-parallel", default=False, type=str_to_bool, help="whether parallel or not")
 parser.add_argument('--ood-rate', type=float, default=0.6, metavar='N', help='OOD rate in unlabeled set')

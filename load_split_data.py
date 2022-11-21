@@ -68,18 +68,19 @@ def get_dataset(args, trial):
 
     # Dataset
     if args.dataset == 'CIFAR10':
-        file_path = '../data/cifar10/'
+
+        file_path = args.data_path + '/cifar10/'
         train_set = MyCIFAR10(file_path, train=True, download=True, transform=train_transform)
         unlabeled_set = MyCIFAR10(file_path, train=True, download=True, transform=test_transform)
         test_set = MyCIFAR10(file_path, train=False, download=True, transform=test_transform)
     elif args.dataset == 'CIFAR100':
-        file_path = '../data/cifar100/'
+        file_path = args.data_path + '/cifar100/'
         train_set = MyCIFAR100(file_path, train=True, download=True, transform=train_transform)
         unlabeled_set = MyCIFAR100(file_path, train=True, download=True, transform=test_transform)
         test_set = MyCIFAR100(file_path, train=False, download=True, transform=test_transform)
     elif args.dataset == 'ImageNet50':
         # Load Preprocessed IN-classes & indices; 50 classes were randomly selected
-        index_path = '../data/imgnet50/class_indice_dict.pickle'
+        index_path = args.data_path + '/ImageNet50/class_indice_dict.pickle'
         with open(index_path, 'rb') as f:
             class_indice_dict = pickle.load(f)
             #class_indice_dict['ood_indices'] = list(np.setdiff1d(list(range(0, len(train_set))), class_indice_dict['in_indices']))
@@ -117,8 +118,10 @@ def get_dataset(args, trial):
         args.input_size = 32 * 32 * 3
         args.target_list = class_indice_dict['in_class']# SEED 1
         args.in_indices = class_indice_dict['in_indices']
+        args.ood_indices = random.sample(list(np.setdiff1d(list(range(0, len(train_set))), list(args.in_indices))),
+                                         round(1.5*len(args.in_indices)))
+        #args.ood_indices = class_indice_dict['ood_indices']
         args.in_test_indices = class_indice_dict['in_indices_test']
-        args.ood_indices = class_indice_dict['ood_indices']
         args.untarget_list = list(np.setdiff1d(list(range(0, 1000)), list(args.target_list)))
         args.num_IN_class = 50
 
