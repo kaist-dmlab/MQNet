@@ -1,5 +1,5 @@
 # Meta-Query-Net: Resolving Purity-Informativeness Dilemma in Open-set Active Learning (NeurIPS 2022, [PDF](https://arxiv.org/pdf/2210.07805.pdf))
-    
+     
 by [Dongmin Park](https://scholar.google.com/citations?user=4xXYQl0AAAAJ&hl=ko)<sup>1</sup>, [Yooju Shin](https://scholar.google.com/citations?user=b4_yMt4AAAAJ&hl=ko)<sup>1</sup>, [Jihwan Bang](https://scholar.google.com/citations?user=molKYzwAAAAJ&hl=ko&oi=ao)<sup>2,3</sup>, [Youngjun Lee](https://scholar.google.com/citations?user=ZOrPKx0AAAAJ&hl=ko&oi=sra), [Hwanjun Song](https://scholar.google.com/citations?user=Ijzuc-8AAAAJ&hl=en&oi=ao)<sup>2</sup>, [Jae-Gil Lee](https://scholar.google.com/citations?user=h9mbv9MAAAAJ&hl=ko)<sup>1</sup>
 
 <sup>1</sup> KAIST, <sup>2</sup> NAVER AI Lab, <sup>3</sup> NAVER CLOVA
