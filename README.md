@@ -5,7 +5,7 @@ by [Dongmin Park](https://scholar.google.com/citations?user=4xXYQl0AAAAJ&hl=ko)<
 <sup>1</sup> KAIST, <sup>2</sup> NAVER AI Lab, <sup>3</sup> NAVER CLOVA
 
 * **`Oct 19, 2022`:** **Our work is publicly available at [ArXiv](https://arxiv.org/abs/2210.07805).**
-* **To be published in NeurIPS 2022.**
+* **`Dec 28, 2022`:** **Our work is published in NeurIPS 2022.**
 
 # How to run
 
